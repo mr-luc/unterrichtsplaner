@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Unterricht">
+<meta name="theme-color" content="#1d1d1f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Unterrichtsplaner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.apple-cloudkit.com/ck/2/cloudkit.js"></script>
+<style>
+:root {
+  --bio: #34a853; --bio-bg: rgba(52,168,83,0.08); --bio-border: rgba(52,168,83,0.2);
+  --che: #0891b2; --che-bg: rgba(8,145,178,0.08); --che-border: rgba(8,145,178,0.2);
+  --it: #6e56cf;  --it-bg: rgba(110,86,207,0.08);  --it-border: rgba(110,86,207,0.2);
+  --bg: #f5f5f7; --surface: rgba(255,255,255,0.72); --surface-solid: #fff;
+  --border: rgba(0,0,0,0.06); --border-strong: rgba(0,0,0,0.1);
+  --header: #1d1d1f; --text: #1d1d1f; --muted: #86868b; --dim: #aeaeb2;
+  --accent: #6e56cf; --accent-bg: rgba(110,86,207,0.06);
+  --r: 12px; --r-sm: 8px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg: 0 24px 80px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.06);
+  --blur: blur(20px) saturate(180%);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px;
+  display: flex; flex-direction: column;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+
+/* TOPBAR */
+.topbar {
+  background: rgba(29,29,31,0.88); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  color: white; padding: 12px 20px;
+  padding-top: max(12px, env(safe-area-inset-top));
+  display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0; z-index: 200;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.topbar-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.topbar-sub { font-size: 11px; color: rgba(255,255,255,0.45); font-weight: 400; }
+.woche-toggle {
+  margin-left: auto; display: flex; gap: 2px;
+  background: rgba(255,255,255,0.08); padding: 3px; border-radius: 8px;
+}
+.woche-btn {
+  padding: 5px 16px; border: none; border-radius: 6px;
+  background: transparent; color: rgba(255,255,255,0.4);
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s ease;
+}
+.woche-btn:hover { color: rgba(255,255,255,0.6); }
+.woche-btn.active-a { background: var(--accent); color: white; box-shadow: 0 2px 8px rgba(110,86,207,0.4); }
+.woche-btn.active-b { background: #0891b2; color: white; box-shadow: 0 2px 8px rgba(8,145,178,0.4); }
+
+/* MAIN LAYOUT */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* STUNDENPLAN */
+.sp-panel { flex: 1; overflow: auto; padding: 12px; }
+.sp-grid {
+  display: grid;
+  grid-template-columns: 52px repeat(5, minmax(100px, 1fr));
+  gap: 4px; min-width: 580px;
+}
+.sp-corner { }
+.sp-day-header {
+  background: var(--header); color: white; text-align: center;
+  padding: 8px 4px; border-radius: var(--r); font-weight: 600; font-size: 13px;
+  letter-spacing: -0.01em;
+}
+.sp-day-header .day-date { font-size: 10px; font-weight: 400; color: rgba(255,255,255,0.4); margin-top: 2px; }
+.sp-day-header.today { background: var(--accent); box-shadow: 0 2px 12px rgba(110,86,207,0.35); }
+.sp-day-header.ferien { background: #b45309; }
+.ferien-cell { background: rgba(251,191,36,0.06) !important; }
+.ferien-banner {
+  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2);
+  border-radius: var(--r); padding: 10px; text-align: center;
+  font-size: 13px; font-weight: 600; color: #b45309;
+}
+.sp-time {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 4px 2px; background: var(--surface-solid); border-radius: var(--r);
+  border: 1px solid var(--border);
+}
+.sp-time .sn { font-size: 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--muted); }
+.sp-time .st { font-size: 8px; color: var(--dim); margin-top: 2px; text-align: center; line-height: 1.4; }
+.sp-cell {
+  background: var(--surface); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 4px; min-height: 72px;
+  display: flex; flex-direction: column; gap: 3px;
+  transition: box-shadow 0.2s ease;
+}
+.sp-cell:hover { box-shadow: var(--shadow-sm); }
+.sp-cell.empty { background: rgba(0,0,0,0.015); }
+.sp-pause {
+  grid-column: 1 / -1; background: transparent; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2px; font-size: 10px; color: var(--dim); font-weight: 500; gap: 8px;
+}
+.sp-pause::before, .sp-pause::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.kl-chip {
+  border-radius: var(--r-sm); padding: 5px 7px; cursor: pointer;
+  border: 1px solid transparent; transition: all 0.15s ease;
+  -webkit-touch-callout: none; user-select: none;
+}
+.kl-chip:hover { transform: scale(1.02); box-shadow: var(--shadow-sm); }
+.kl-chip:active { transform: scale(0.98); opacity: 0.85; }
+.kl-chip.bio { background: var(--bio-bg); border-color: var(--bio-border); }
+.kl-chip.che { background: var(--che-bg); border-color: var(--che-border); }
+.kl-chip.it  { background: var(--it-bg);  border-color: var(--it-border);  }
+.kl-top { display: flex; align-items: center; justify-content: space-between; }
+.kl-name { font-weight: 600; font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+.kl-chip.bio .kl-name { color: var(--bio); }
+.kl-chip.che .kl-name { color: var(--che); }
+.kl-chip.it  .kl-name { color: var(--it);  }
+.kl-sub { font-size: 9px; color: var(--muted); margin-top: 1px; font-weight: 500; }
+.kl-thema { font-size: 9px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-pip { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.status-pip.geplant   { background: var(--dim); }
+.status-pip.in-arbeit { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+.status-pip.fertig    { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+
+/* AI PANEL */
+.ai-panel {
+  width: 340px; flex-shrink: 0;
+  background: var(--surface); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.ai-header {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  background: var(--accent-bg);
+}
+.ai-header-title { font-weight: 600; font-size: 14px; color: var(--accent); letter-spacing: -0.01em; }
+.ai-header-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.ai-key-row {
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  display: flex; gap: 6px; align-items: center;
+}
+.ai-key-input {
+  flex: 1; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  padding: 7px 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  outline: none; color: var(--text); background: rgba(0,0,0,0.02);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ai-key-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110,86,207,0.1); }
+.ai-key-save {
+  padding: 7px 12px; border: none; border-radius: var(--r-sm);
+  background: var(--accent); color: white; font-size: 12px;
+  font-family: 'Inter', sans-serif; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.ai-key-save:hover { opacity: 0.88; }
+.ai-key-status { font-size: 10px; color: var(--muted); }
+
+.ai-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ai-msg { max-width: 88%; }
+.ai-msg.user { align-self: flex-end; }
+.ai-msg.assistant { align-self: flex-start; }
+.ai-bubble {
+  padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.55;
+}
+.ai-msg.user .ai-bubble {
+  background: var(--accent); color: white;
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 2px 8px rgba(110,86,207,0.25);
+}
+.ai-msg.assistant .ai-bubble {
+  background: rgba(0,0,0,0.04); color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.ai-msg.assistant.loading .ai-bubble { color: var(--muted); font-style: italic; }
+.ai-input-row {
+  padding: 12px 14px; border-top: 1px solid var(--border);
+  display: flex; gap: 8px; align-items: flex-end;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: rgba(255,255,255,0.6);
+}
+.ai-textarea {
+  flex: 1; border: 1px solid var(--border-strong); border-radius: var(--r);
+  padding: 10px 14px; font-family: 'Inter', sans-serif; font-size: 13px;
+  outline: none; resize: none; max-height: 100px; line-height: 1.45;
+  color: var(--text); background: var(--surface-solid);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ai-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110,86,207,0.1); }
+.ai-send {
+  width: 38px; height: 38px; border: none; border-radius: var(--r);
+  background: var(--accent); color: white; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.1s;
+  box-shadow: 0 2px 8px rgba(110,86,207,0.3);
+}
+.ai-send:hover { opacity: 0.9; transform: scale(1.04); }
+.ai-send:active { transform: scale(0.96); }
+.ai-send:disabled { opacity: 0.3; box-shadow: none; transform: none; }
+
+/* MODAL */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  z-index: 500; align-items: center; justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--surface-solid); border-radius: 16px; padding: 24px;
+  width: 360px; max-width: 92vw;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.2s ease;
+}
+@keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: none; } }
+.modal-title { font-size: 17px; font-weight: 600; margin-bottom: 16px; letter-spacing: -0.02em; }
+.modal label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; margin-top: 14px; }
+.modal input, .modal textarea {
+  width: 100%; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  padding: 10px 12px; font-family: 'Inter', sans-serif; font-size: 14px;
+  outline: none; color: var(--text); transition: border-color 0.2s, box-shadow 0.2s;
+}
+.modal input:focus, .modal textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110,86,207,0.1); }
+.modal textarea { resize: vertical; min-height: 60px; }
+.modal-status { display: flex; gap: 6px; margin-top: 5px; }
+.msb {
+  flex: 1; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--border-strong);
+  background: var(--surface-solid); font-family: 'Inter', sans-serif; font-size: 12px;
+  font-weight: 600; cursor: pointer; text-align: center; color: var(--muted);
+  transition: all 0.15s ease;
+}
+.msb:hover { background: rgba(0,0,0,0.02); }
+.msb.sel-geplant   { background: rgba(0,0,0,0.04); border-color: var(--dim); color: var(--text); }
+.msb.sel-in-arbeit { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.3); color: #b45309; }
+.msb.sel-fertig    { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.3); color: #15803d; }
+.modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+.btn-save {
+  flex: 1; padding: 11px; border: none; border-radius: var(--r-sm);
+  background: var(--accent); color: white; font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s; box-shadow: 0 2px 8px rgba(110,86,207,0.25);
+}
+.btn-save:hover { opacity: 0.9; }
+.btn-cancel {
+  padding: 11px 16px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface-solid); color: var(--muted); font-family: 'Inter', sans-serif;
+  font-size: 14px; cursor: pointer; transition: background 0.15s;
+}
+.btn-cancel:hover { background: rgba(0,0,0,0.03); }
+.btn-od-folder {
+  padding: 11px 14px; border: 1px solid rgba(0,120,212,0.3); border-radius: var(--r-sm);
+  background: rgba(0,120,212,0.06); color: #0078d4; font-family: 'Inter', sans-serif;
+  font-size: 14px; cursor: pointer; transition: background 0.15s;
+}
+.btn-od-folder:hover { background: rgba(0,120,212,0.1); }
+.btn-onenote {
+  padding: 11px 14px; border: 1px solid rgba(119,25,170,0.3); border-radius: var(--r-sm);
+  background: rgba(119,25,170,0.06); color: #7719aa; font-family: 'Inter', sans-serif;
+  font-size: 14px; cursor: pointer; transition: background 0.15s;
+}
+.btn-onenote:hover { background: rgba(119,25,170,0.1); }
+.od-file-item {
+  display:flex; align-items:center; gap:8px; padding:8px 10px;
+  border-radius:var(--r-sm); border:1px solid var(--border); margin-bottom:5px;
+  background:var(--surface-solid); transition: background 0.15s;
+}
+.od-file-item:hover { background: rgba(0,0,0,0.02); }
+.od-file-item a { flex:1; color:var(--text); text-decoration:none; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.od-file-item a:hover { color:#0078d4; }
+.od-file-date { font-size:11px; color:var(--muted); white-space:nowrap; }
+.od-file-loading { color:var(--muted); font-size:13px; padding:6px 0; }
+.od-upload-progress { font-size:12px; color:var(--accent); padding:4px 0; }
+
+/* SETUP SCREEN */
+.setup-screen {
+  display: none; position: fixed; inset: 0;
+  background: var(--header);
+  z-index: 1000; align-items: center; justify-content: center; flex-direction: column;
+  gap: 20px; padding: 32px;
+}
+.setup-screen.open { display: flex; }
+.setup-logo { font-size: 48px; }
+.setup-title { color: white; font-size: 24px; font-weight: 600; text-align: center; letter-spacing: -0.02em; }
+.setup-sub { color: rgba(255,255,255,0.45); font-size: 14px; text-align: center; line-height: 1.6; max-width: 340px; }
+.setup-input {
+  width: 100%; max-width: 340px; border: 1px solid rgba(255,255,255,0.12); border-radius: var(--r);
+  padding: 14px 16px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  background: rgba(255,255,255,0.06); color: white; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.setup-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110,86,207,0.2); }
+.setup-btn {
+  width: 100%; max-width: 340px; padding: 14px; border: none; border-radius: var(--r);
+  background: var(--accent); color: white; font-family: 'Inter', sans-serif;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s; box-shadow: 0 4px 16px rgba(110,86,207,0.35);
+}
+.setup-btn:hover { opacity: 0.9; }
+.setup-skip { color: rgba(255,255,255,0.35); font-size: 13px; cursor: pointer; text-decoration: none; font-weight: 500; transition: color 0.15s; }
+.setup-skip:hover { color: rgba(255,255,255,0.55); }
+
+/* ONEDRIVE SYNC */
+.sync-status {
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4);
+  cursor: default; flex-shrink: 0; transition: all 0.2s;
+}
+.sync-status.syncing { color: #fbbf24; }
+.sync-status.synced  { color: #4ade80; }
+.sync-status.error   { color: #f87171; cursor: pointer; }
+.od-header {
+  padding: 10px 16px 8px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(59,130,246,0.04);
+}
+.od-header-label { font-size: 11px; font-weight: 600; color: #3b82f6; flex: 1; }
+.od-user-text { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.od-btn {
+  padding: 5px 12px; border: none; border-radius: 6px; font-size: 11px;
+  font-family: 'Inter', sans-serif; font-weight: 600; cursor: pointer;
+  background: #3b82f6; color: white; flex-shrink: 0; transition: opacity 0.15s;
+}
+.od-btn:hover { opacity: 0.88; }
+.od-btn.logout { background: rgba(0,0,0,0.06); color: var(--muted); }
+
+/* DARK MODE */
+.dark {
+  --bg: #0d0d0f; --surface: rgba(30,30,34,0.8); --surface-solid: #1c1c1e;
+  --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.12);
+  --header: #000; --text: #f5f5f7; --muted: #8e8e93; --dim: #636366;
+  --accent-bg: rgba(110,86,207,0.12);
+  --bio-bg: rgba(52,168,83,0.15); --bio-border: rgba(52,168,83,0.3);
+  --che-bg: rgba(8,145,178,0.15); --che-border: rgba(8,145,178,0.3);
+  --it-bg: rgba(110,86,207,0.15); --it-border: rgba(110,86,207,0.3);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2); --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 24px 80px rgba(0,0,0,0.5);
+}
+.dark .topbar { background: rgba(0,0,0,0.85); border-bottom-color: rgba(255,255,255,0.06); }
+.dark .sp-cell.empty { background: rgba(255,255,255,0.02); }
+.dark .ai-input-row { background: rgba(30,30,34,0.8); }
+.dark .ai-msg.assistant .ai-bubble { background: rgba(255,255,255,0.06); }
+.dark .modal { background: #2c2c2e; }
+.dark .modal input, .dark .modal textarea { background: rgba(255,255,255,0.06); }
+.dark .msb { background: transparent; }
+.dark .msb:hover { background: rgba(255,255,255,0.04); }
+.dark .ferien-cell { background: rgba(251,191,36,0.04) !important; }
+.dark .setup-screen { background: #000; }
+.dark .od-header { background: rgba(59,130,246,0.08); }
+.dark .od-btn.logout { background: rgba(255,255,255,0.08); color: var(--muted); }
+.dark .btn-cancel { background: transparent; }
+
+/* THEME TOGGLE */
+.theme-toggle {
+  width: 32px; height: 32px; border: none; border-radius: 8px;
+  background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6);
+  font-size: 15px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; transition: all 0.2s; flex-shrink: 0;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.14); color: white; }
+
+/* STATS BAR */
+.stats-bar {
+  display: flex; gap: 12px; padding: 8px 16px;
+  border-bottom: 1px solid var(--border); background: var(--accent-bg);
+  font-size: 11px; font-weight: 600; align-items: center;
+}
+.stat-item { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.stat-dot { width: 8px; height: 8px; border-radius: 50%; }
+.stat-dot.geplant { background: var(--dim); }
+.stat-dot.in-arbeit { background: #f59e0b; }
+.stat-dot.fertig { background: #22c55e; }
+.stat-count { color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.stat-bar-wrap { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-left: 8px; }
+.stat-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease;
+  background: linear-gradient(90deg, var(--accent), #22c55e); }
+
+/* HEUTE BUTTON */
+.heute-btn {
+  padding: 4px 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+  background: transparent; color: rgba(255,255,255,0.5); font-family: 'Inter', sans-serif;
+  font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.heute-btn:hover { background: rgba(255,255,255,0.08); color: white; }
+
+/* CHAT CLEAR */
+.chat-clear {
+  margin-left: auto; background: none; border: none; color: var(--muted);
+  font-size: 12px; cursor: pointer; font-family: 'Inter', sans-serif;
+  font-weight: 500; transition: color 0.15s;
+}
+.chat-clear:hover { color: var(--text); }
+
+/* PRINT STYLES */
+@media print {
+  .topbar, .ai-panel, .modal-backdrop, .setup-screen { display: none !important; }
+  .main { display: block !important; }
+  .sp-panel { padding: 0; overflow: visible; }
+  .sp-grid { min-width: 0; gap: 2px; }
+  body { background: white; color: black; font-size: 11px; }
+  .sp-cell { min-height: 50px; page-break-inside: avoid; }
+  .kl-chip { border-width: 1px; }
+  .kl-chip:hover { transform: none; box-shadow: none; }
+  .sp-cell:hover { box-shadow: none; }
+  @page { size: landscape; margin: 10mm; }
+  .print-header { display: block !important; text-align: center; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+}
+.print-header { display: none; }
+
+/* PRINT BUTTON */
+.print-btn {
+  width: 32px; height: 32px; border: none; border-radius: 8px;
+  background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6);
+  font-size: 14px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; transition: all 0.2s; flex-shrink: 0;
+}
+.print-btn:hover { background: rgba(255,255,255,0.14); color: white; }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div class="setup-screen" id="setup-screen">
+  <div class="setup-logo">💻</div>
+  <div class="setup-title">Unterrichtsplaner</div>
+  <div class="setup-sub">Gib deinen Anthropic API-Key ein, um die KI-Planung zu aktivieren. Der Key wird nur auf diesem Gerät gespeichert.</div>
+  <input class="setup-input" type="password" id="setup-key-input" placeholder="sk-ant-..." />
+  <button class="setup-btn" onclick="saveSetupKey()">Starten</button>
+  <span class="setup-skip" onclick="skipSetup()">Ohne KI fortfahren</span>
+</div>
+
+<!-- MAIN APP -->
+<div class="topbar">
+  <span style="font-size:20px">💻</span>
+  <div>
+    <div class="topbar-title">Unterrichtsplaner</div>
+    <div class="topbar-sub">Schulzentrum Oberes Elztal</div>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+    <button onclick="changeWeek(-1)" style="background:rgba(255,255,255,0.08);border:none;color:rgba(255,255,255,0.5);font-size:16px;width:30px;height:30px;border-radius:6px;cursor:pointer">‹</button>
+    <div style="text-align:center;min-width:80px">
+      <div id="woche-label" style="font-size:12px;font-weight:600;color:white"></div>
+      <div id="woche-range" style="font-size:10px;color:rgba(255,255,255,0.4)"></div>
+    </div>
+    <button onclick="changeWeek(1)" style="background:rgba(255,255,255,0.08);border:none;color:rgba(255,255,255,0.5);font-size:16px;width:30px;height:30px;border-radius:6px;cursor:pointer">›</button>
+    <button class="heute-btn" onclick="goToday()">Heute</button>
+  </div>
+  <div class="woche-toggle">
+    <button class="woche-btn active-a" id="btn-a" onclick="setWocheManual('A')">A</button>
+    <button class="woche-btn" id="btn-b" onclick="setWocheManual('B')">B</button>
+  </div>
+  <span class="sync-status" id="sync-status" title="iCloud-Sync" style="display:none"></span>
+  <button class="print-btn" onclick="printPlan()" title="Drucken">🖨</button>
+  <button class="theme-toggle" id="theme-toggle" onclick="toggleDarkMode()" title="Dark Mode">🌙</button>
+</div>
+
+<div class="main">
+  <!-- STUNDENPLAN -->
+  <div class="sp-panel">
+    <div class="print-header" id="print-header"></div>
+    <div class="sp-grid" id="sp-grid"></div>
+  </div>
+
+  <!-- AI PANEL -->
+  <div class="ai-panel">
+    <div class="ai-header">
+      <span style="font-size:20px">✨</span>
+      <div>
+        <div class="ai-header-title">KI-Assistent</div>
+        <div class="ai-header-sub">Unterricht einplanen lassen</div>
+      </div>
+      <button class="chat-clear" onclick="clearChat()" title="Chat leeren">Leeren</button>
+    </div>
+    <div class="stats-bar" id="stats-bar"></div>
+    <!-- iCloud CloudKit -->
+    <div class="od-header" id="ck-setup-row" style="background:rgba(0,113,227,0.04)">
+      <span style="font-size:14px">☁️</span>
+      <span class="od-header-label" style="color:#0071e3">iCloud</span>
+      <input class="ai-key-input" id="ck-container-input" placeholder="Container-ID" style="max-width:95px;font-size:10px" />
+      <input class="ai-key-input" id="ck-token-input" placeholder="API-Token" style="max-width:95px;font-size:10px" />
+      <button class="ai-key-save" onclick="saveCkConfig()" style="padding:4px 8px;font-size:11px;background:#0071e3">✓</button>
+    </div>
+    <div class="od-header" id="ck-auth-row" style="display:none;background:rgba(0,113,227,0.04)">
+      <span style="font-size:14px">☁️</span>
+      <span class="od-header-label" style="color:#0071e3">iCloud</span>
+      <span class="od-user-text" id="ck-user"></span>
+      <span id="ck-sign-in-btn" style="flex-shrink:0"></span>
+      <span id="ck-sign-out-btn" style="flex-shrink:0"></span>
+      <button onclick="resetCkConfig()" style="background:none;border:none;cursor:pointer;font-size:12px;color:#6b6b8a;padding:0 2px" title="Config ändern">✏️</button>
+    </div>
+    <!-- Anthropic API Key -->
+    <div class="ai-key-row">
+      <input class="ai-key-input" type="password" id="api-key-input" placeholder="sk-ant-..." />
+      <button class="ai-key-save" onclick="saveApiKey()">✓</button>
+      <span class="ai-key-status" id="key-status">—</span>
+    </div>
+    <div class="ai-messages" id="ai-messages">
+      <div class="ai-msg assistant">
+        <div class="ai-bubble">Hallo! Ich helfe dir beim Einplanen deines Unterrichts. Zum Beispiel:<br><br>
+        • <i>„Trage für W7a und W7b Algorithmen als Thema ein, Status in Arbeit"</i><br>
+        • <i>„Was ist diese Woche noch auf geplant?"</i><br>
+        • <i>„Setze alle IT-Klassen auf fertig"</i></div>
+      </div>
+    </div>
+    <div class="ai-input-row">
+      <textarea class="ai-textarea" id="ai-input" placeholder="Nachricht eingeben…" rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="ai-send" id="ai-send-btn" onclick="sendMessage()">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-backdrop" id="modal-backdrop" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title" id="modal-title"></div>
+    <label>Aktuelles Thema</label>
+    <input type="text" id="modal-thema" placeholder="z.B. Algorithmen – AB 2" />
+    <label>Notiz</label>
+    <textarea id="modal-notiz" placeholder="z.B. Test KW 22 geplant"></textarea>
+    <label>Status</label>
+    <div class="modal-status">
+      <button class="msb" onclick="selStatus('geplant')">geplant</button>
+      <button class="msb" onclick="selStatus('in-arbeit')">in Arbeit</button>
+      <button class="msb" onclick="selStatus('fertig')">fertig</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-save" onclick="saveModal()">Speichern</button>
+      <button class="btn-cancel" onclick="closeModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DARK MODE ────────────────────────────────────────────
+let darkMode = localStorage.getItem('up_dark') === '1';
+function applyDarkMode() {
+  document.body.classList.toggle('dark', darkMode);
+  document.getElementById('theme-toggle').textContent = darkMode ? '☀️' : '🌙';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', darkMode ? '#000' : '#1d1d1f');
+}
+function toggleDarkMode() {
+  darkMode = !darkMode;
+  localStorage.setItem('up_dark', darkMode ? '1' : '0');
+  applyDarkMode();
+}
+applyDarkMode();
+
+// ── STUNDENPLAN DATA ─────────────────────────────────────
+const STUNDEN = [
+  { std:1, von:"07:30", bis:"08:15" },
+  { std:2, von:"08:15", bis:"09:00", pause_after:true },
+  { std:3, von:"09:15", bis:"10:00" },
+  { std:4, von:"10:00", bis:"10:45", pause_after:true },
+  { std:5, von:"11:05", bis:"11:50" },
+  { std:6, von:"11:50", bis:"12:35", pause_after:true },
+  { std:7, von:"13:15", bis:"14:00" },
+  { std:8, von:"14:00", bis:"14:45" },
+  { std:9, von:"14:45", bis:"15:30" },
+];
+const TAGE = ["MO","DI","MI","DO","FR"];
+const FACH_CLASS = { Bio:"bio", Che:"che", IT:"it" };
+const FACH_COLOR = { Bio:"var(--bio)", Che:"var(--che)", IT:"var(--it)" };
+
+// Baden-Württemberg Schulferien 2025/2026
+const FERIEN = [
+  { name:"Herbstferien",     von: new Date(2025,9,27),  bis: new Date(2025,10,1)  },
+  { name:"Weihnachtsferien", von: new Date(2025,11,22), bis: new Date(2026,0,10)  },
+  { name:"Faschingsferien",  von: new Date(2026,1,23),  bis: new Date(2026,1,28)  },
+  { name:"Osterferien",      von: new Date(2026,2,30),  bis: new Date(2026,3,12)  },
+  { name:"Pfingstferien",    von: new Date(2026,4,26),  bis: new Date(2026,5,6)   },
+  { name:"Sommerferien",     von: new Date(2026,6,30),  bis: new Date(2026,8,12)  },
+];
+
+function getFerienName(date) {
+  const d = new Date(date); d.setHours(0,0,0,0);
+  for (const f of FERIEN) {
+    if (d >= f.von && d <= f.bis) return f.name;
+  }
+  return null;
+}
+
+const EINTRAEGE = [
+  { std:1, tag:"MO", fach:"Bio", klasse:"R10a", raum:"207",    woche:"AB" },
+  { std:2, tag:"MO", fach:"Bio", klasse:"R10b", raum:"207",    woche:"AB" },
+  { std:1, tag:"DO", fach:"Bio", klasse:"W10",  raum:"Wi MNT", woche:"AB" },
+  { std:2, tag:"DO", fach:"Bio", klasse:"W10",  raum:"Wi MNT", woche:"AB" },
+  { std:4, tag:"FR", fach:"Bio", klasse:"W8b",  raum:"Wi MNT", woche:"AB" },
+  { std:5, tag:"FR", fach:"Bio", klasse:"W8b",  raum:"Wi MNT", woche:"AB" },
+  { std:5, tag:"FR", fach:"Bio", klasse:"W9a",  raum:"Wi 21",  woche:"AB" },
+  { std:7, tag:"DO", fach:"Bio", klasse:"W8a",  raum:"Wi MNT", woche:"AB" },
+  { std:8, tag:"DO", fach:"Bio", klasse:"W8a",  raum:"Wi MNT", woche:"AB" },
+  { std:1, tag:"DI", fach:"Che", klasse:"W8a",  raum:"Wi MNT", woche:"AB" },
+  { std:2, tag:"DI", fach:"Che", klasse:"W8a",  raum:"Wi MNT", woche:"AB" },
+  { std:3, tag:"MO", fach:"IT",  klasse:"R6a",  raum:"PC-RS",  woche:"AB" },
+  { std:4, tag:"MO", fach:"IT",  klasse:"W7b",  raum:"PC-RS",  woche:"AB" },
+  { std:3, tag:"DO", fach:"IT",  klasse:"W5a",  raum:"PC-RS",  woche:"AB" },
+  { std:4, tag:"DI", fach:"IT",  klasse:"W6b",  raum:"224",    woche:"AB" },
+  { std:4, tag:"MI", fach:"IT",  klasse:"R6c",  raum:"PC-WRS", woche:"AB" },
+  { std:4, tag:"DO", fach:"IT",  klasse:"R5b",  raum:"PC-RS",  woche:"AB" },
+  { std:5, tag:"DI", fach:"IT",  klasse:"W7a",  raum:"PC-RS",  woche:"AB" },
+  { std:5, tag:"MI", fach:"IT",  klasse:"R6b",  raum:"PC-WRS", woche:"AB" },
+  { std:5, tag:"DO", fach:"IT",  klasse:"R7b",  raum:"PC-RS",  woche:"AB" },
+  { std:7, tag:"DI", fach:"IT",  klasse:"R10a", raum:"305",    woche:"A"  },
+  { std:8, tag:"DI", fach:"IT",  klasse:"R10a", raum:"305",    woche:"A"  },
+  { std:7, tag:"DI", fach:"IT",  klasse:"R10b", raum:"303",    woche:"B"  },
+  { std:8, tag:"DI", fach:"IT",  klasse:"R10b", raum:"303",    woche:"B"  },
+  { std:7, tag:"DO", fach:"IT",  klasse:"R8a",  raum:"PC-RS",  woche:"AB" },
+  { std:7, tag:"DO", fach:"IT",  klasse:"R8b",  raum:"PC-RS",  woche:"AB" },
+  { std:7, tag:"DO", fach:"IT",  klasse:"R8c",  raum:"PC-RS",  woche:"AB" },
+  { std:8, tag:"DO", fach:"IT",  klasse:"R8a",  raum:"PC-RS",  woche:"AB" },
+  { std:8, tag:"DO", fach:"IT",  klasse:"R8b",  raum:"PC-RS",  woche:"AB" },
+  { std:8, tag:"DO", fach:"IT",  klasse:"R8c",  raum:"PC-RS",  woche:"AB" },
+];
+
+// Unique classes for AI context
+const ALL_KLASSEN = [...new Set(EINTRAEGE.map(e => `${e.fach} ${e.klasse}`))].sort();
+const VALID_KEYS = new Set(EINTRAEGE.map(e => `${e.fach}_${e.klasse}`));
+const VALID_STATUSES = ['geplant', 'in-arbeit', 'fertig'];
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── STATE ─────────────────────────────────────────────────
+let state = {};
+try { state = JSON.parse(localStorage.getItem('up_v3') || '{}'); } catch {}
+function save() { localStorage.setItem('up_v3', JSON.stringify(state)); }
+function getKey(f, k) { return `${f}_${k}`; }
+function getS(f, k) {
+  const key = getKey(f, k);
+  if (!state[key]) state[key] = { thema:"", notiz:"", status:"geplant" };
+  if (!VALID_STATUSES.includes(state[key].status)) state[key].status = 'geplant';
+  return state[key];
+}
+
+// ── API KEY ───────────────────────────────────────────────
+let apiKey = localStorage.getItem('up_apikey') || '';
+
+function saveSetupKey() {
+  const val = document.getElementById('setup-key-input').value.trim();
+  if (val) { apiKey = val; localStorage.setItem('up_apikey', val); }
+  document.getElementById('setup-screen').classList.remove('open');
+  document.getElementById('api-key-input').value = val ? '••••••••••••' : '';
+  document.getElementById('key-status').textContent = val ? '✓ aktiv' : '—';
+}
+function skipSetup() {
+  document.getElementById('setup-screen').classList.remove('open');
+}
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (val && !val.startsWith('•')) {
+    apiKey = val;
+    localStorage.setItem('up_apikey', val);
+    document.getElementById('api-key-input').value = '••••••••••••';
+  }
+  document.getElementById('key-status').textContent = apiKey ? '✓ aktiv' : '—';
+}
+
+// ── WOCHE ────────────────────────────────────────────────
+let currentWoche = "A";
+let weekOffset = 0;
+// Referenz: 23.03.2026 (KW 13) = B-Woche (letzte Schulwoche vor Osterferien)
+const AB_REF_MONDAY = new Date(2026, 2, 23);
+
+function getMonday(offset) {
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const monday = new Date(now);
+  monday.setHours(0,0,0,0);
+  monday.setDate(now.getDate() - day + 1 + offset * 7);
+  return monday;
+}
+
+function getIsoWeek(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - (d.getDay()+6)%7);
+  const week1 = new Date(d.getFullYear(),0,4);
+  return 1 + Math.round(((d-week1)/86400000 - 3 + (week1.getDay()+6)%7)/7);
+}
+
+// Zählt Schulwochen (ohne Ferien) zwischen Referenz und Ziel
+function wocheFromDate(monday) {
+  const m = new Date(monday); m.setHours(0,0,0,0);
+  const refTime = AB_REF_MONDAY.getTime();
+  const targetTime = m.getTime();
+  if (refTime === targetTime) return 'B'; // Referenz = B
+  const forward = targetTime > refTime;
+  let schoolWeeks = 0;
+  let d = new Date(refTime);
+  while (d.getTime() !== targetTime) {
+    d.setDate(d.getDate() + (forward ? 7 : -7));
+    if (!getFerienName(d)) schoolWeeks++;
+  }
+  // Referenz B: ungerade Schulwochen = A, gerade = B
+  return schoolWeeks % 2 === 1 ? 'A' : 'B';
+}
+
+function changeWeek(delta) {
+  weekOffset += delta;
+  const monday = getMonday(weekOffset);
+  const auto = !getFerienName(monday);
+  if (auto) currentWoche = wocheFromDate(monday);
+  updateWocheUI();
+  renderGrid();
+}
+
+function setWocheManual(w) {
+  currentWoche = w;
+  updateWocheUI();
+  renderGrid();
+}
+
+function updateWocheUI() {
+  const monday = getMonday(weekOffset);
+  const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
+  const fmt = d => d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+  const kw = getIsoWeek(monday);
+  const ferien = getFerienName(monday);
+  document.getElementById('woche-label').textContent = ferien ? `KW ${kw} · ${ferien}` : `KW ${kw} · ${currentWoche}-Woche`;
+  document.getElementById('woche-range').textContent = `${fmt(monday)} – ${fmt(friday)}`;
+  document.getElementById('btn-a').className = 'woche-btn' + (currentWoche==='A'?' active-a':'');
+  document.getElementById('btn-b').className = 'woche-btn' + (currentWoche==='B'?' active-b':'');
+}
+
+// ── RENDER GRID ──────────────────────────────────────────
+function renderGrid() {
+  const grid = document.getElementById('sp-grid');
+  grid.innerHTML = '';
+  const monday = getMonday(weekOffset);
+  const today = new Date(); today.setHours(0,0,0,0);
+  // Ferien pro Tag vorberechnen
+  const dayDates = TAGE.map((_, i) => { const d = new Date(monday); d.setDate(monday.getDate()+i); return d; });
+  const ferienTage = dayDates.map(d => getFerienName(d));
+  const alleFerienName = ferienTage.every(f => f && f === ferienTage[0]) ? ferienTage[0] : null;
+  grid.appendChild(document.createElement('div')); // corner
+  TAGE.forEach((tag, i) => {
+    const dayDate = dayDates[i];
+    const isToday = dayDate.getTime() === today.getTime();
+    const ferien = ferienTage[i];
+    const h = document.createElement('div');
+    h.className = 'sp-day-header' + (isToday ? ' today' : '') + (ferien ? ' ferien' : '');
+    h.innerHTML = `${tag}<div class="day-date">${dayDate.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })}</div>`;
+    grid.appendChild(h);
+  });
+  // Ferienband über ganzer Woche anzeigen
+  if (alleFerienName) {
+    const banner = document.createElement('div');
+    banner.className = 'ferien-banner';
+    banner.style.gridColumn = '1 / -1';
+    banner.textContent = `🏖 ${alleFerienName}`;
+    grid.appendChild(banner);
+  }
+  STUNDEN.forEach(std => {
+    const tc = document.createElement('div');
+    tc.className = 'sp-time';
+    tc.innerHTML = `<div class="sn">${std.std}</div><div class="st">${std.von}<br>${std.bis}</div>`;
+    grid.appendChild(tc);
+    TAGE.forEach((tag, i) => {
+      const cell = document.createElement('div');
+      const ferien = ferienTage[i];
+      cell.className = 'sp-cell' + (ferien ? ' ferien-cell' : '');
+      if (ferien) { grid.appendChild(cell); return; }
+      const entries = EINTRAEGE.filter(e =>
+        e.std===std.std && e.tag===tag && (e.woche==='AB' || e.woche===currentWoche)
+      );
+      const seen = new Set();
+      entries.forEach(e => {
+        const uid = e.fach+e.klasse;
+        if (seen.has(uid)) return;
+        seen.add(uid);
+        const s = getS(e.fach, e.klasse);
+        const chip = document.createElement('div');
+        chip.className = `kl-chip ${FACH_CLASS[e.fach]}`;
+        chip.onclick = () => openModal(e.fach, e.klasse);
+        chip.innerHTML = `
+          <div class="kl-top">
+            <span class="kl-name">${escapeHtml(e.klasse)}</span>
+            <span class="status-pip ${s.status}"></span>
+          </div>
+          <div class="kl-sub">${escapeHtml(e.fach)} · ${escapeHtml(e.raum)}</div>
+          ${s.thema ? `<div class="kl-thema">${escapeHtml(s.thema)}</div>` : ''}
+        `;
+        cell.appendChild(chip);
+      });
+      if (!entries.length) cell.classList.add('empty');
+      grid.appendChild(cell);
+    });
+    if (std.pause_after) {
+      const p = document.createElement('div');
+      p.className = 'sp-pause'; p.textContent = 'Pause';
+      grid.appendChild(p);
+    }
+  });
+}
+
+// ── MODAL ────────────────────────────────────────────────
+let modalKey = null, modalStatus = "geplant";
+function openModal(fach, klasse) {
+  modalKey = getKey(fach, klasse);
+  const s = getS(fach, klasse);
+  modalStatus = s.status;
+  document.getElementById('modal-title').innerHTML =
+    `<span style="color:${FACH_COLOR[fach]}">${escapeHtml(fach)}</span> · ${escapeHtml(klasse)}`;
+  document.getElementById('modal-thema').value = s.thema || '';
+  document.getElementById('modal-notiz').value  = s.notiz  || '';
+  selStatus(s.status);
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+
+function selStatus(st) {
+  modalStatus = st;
+  document.querySelectorAll('.msb').forEach(b => b.className = 'msb');
+  const map = { geplant:0, 'in-arbeit':1, fertig:2 };
+  document.querySelectorAll('.msb')[map[st]].className = `msb sel-${st}`;
+}
+function saveModal() {
+  if (!modalKey) return;
+  if (!state[modalKey]) state[modalKey] = {};
+  state[modalKey].thema  = document.getElementById('modal-thema').value;
+  state[modalKey].notiz  = document.getElementById('modal-notiz').value;
+  state[modalKey].status = modalStatus;
+  save(); closeModal(); renderGrid(); updateStats(); syncToiCloud();
+}
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-backdrop')) return;
+  document.getElementById('modal-backdrop').classList.remove('open');
+  modalKey = null;
+}
+
+// ── AI CHAT ──────────────────────────────────────────────
+let aiHistory = [];
+let aiLoading = false;
+
+function buildSystemPrompt() {
+  const stateJson = JSON.stringify(state, null, 2);
+  const klassenList = ALL_KLASSEN.join(', ');
+  return `Du bist ein Unterrichtsassistent für July, Lehrerin am Schulzentrum Oberes Elztal.
+Du hilfst dabei, den Unterrichtsplaner zu verwalten. Du unterrichtest: ${klassenList}.
+
+Der aktuelle Planungsstand (JSON):
+${stateJson}
+
+Schlüssel-Format: "Fach_Klasse", z.B. "IT_W7a", "Bio_R10a", "Che_W8a".
+Status-Werte: "geplant", "in-arbeit", "fertig".
+
+Wenn du Änderungen vornehmen sollst, antworte IMMER mit einem JSON-Block am Ende deiner Antwort in diesem Format:
+<UPDATES>
+{"IT_W7a": {"thema": "Algorithmen", "status": "in-arbeit"}, "IT_W7b": {"thema": "Algorithmen", "status": "in-arbeit"}}
+</UPDATES>
+
+Wenn keine Änderungen nötig sind, lass den UPDATES-Block weg.
+Antworte auf Deutsch, kurz und freundlich.`;
+}
+
+function addMessage(role, text, loading=false) {
+  const msgs = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = `ai-msg ${role}${loading?' loading':''}`;
+  div.innerHTML = `<div class="ai-bubble">${escapeHtml(text).replace(/\n/g,'<br>')}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+async function sendMessage() {
+  if (aiLoading) return;
+  const input = document.getElementById('ai-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  if (!apiKey) {
+    addMessage('assistant', 'Bitte zuerst den API-Key eingeben (Feld oben im KI-Bereich).');
+    return;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  addMessage('user', text);
+  aiHistory.push({ role: 'user', content: text });
+  saveChatHistory();
+
+  aiLoading = true;
+  document.getElementById('ai-send-btn').disabled = true;
+  const loadingDiv = addMessage('assistant', '...', true);
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: buildSystemPrompt(),
+        messages: aiHistory
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.content || !data.content[0]) throw new Error('Leere Antwort vom Server');
+
+    const reply = data.content[0].text;
+    aiHistory.push({ role: 'assistant', content: reply });
+    saveChatHistory();
+
+    // Parse updates
+    const updMatch = reply.match(/<UPDATES>([\s\S]*?)<\/UPDATES>/);
+    let displayText = reply.replace(/<UPDATES>[\s\S]*?<\/UPDATES>/g, '').trim();
+
+    if (updMatch) {
+      try {
+        const updates = JSON.parse(updMatch[1].trim());
+        let count = 0;
+        Object.entries(updates).forEach(([key, vals]) => {
+          if (!VALID_KEYS.has(key)) return;
+          if (!state[key]) state[key] = { thema:'', notiz:'', status:'geplant' };
+          if (typeof vals.thema === 'string') state[key].thema = vals.thema.slice(0, 200);
+          if (typeof vals.notiz === 'string') state[key].notiz = vals.notiz.slice(0, 500);
+          if (VALID_STATUSES.includes(vals.status)) state[key].status = vals.status;
+          count++;
+        });
+        save(); renderGrid(); updateStats(); syncToiCloud();
+        displayText += `\n\n✅ ${count} Klasse${count!==1?'n':''} aktualisiert.`;
+      } catch(e) { console.error('Parse error', e); }
+    }
+
+    loadingDiv.className = 'ai-msg assistant';
+    loadingDiv.querySelector('.ai-bubble').innerHTML = escapeHtml(displayText).replace(/\n/g,'<br>');
+
+  } catch(err) {
+    loadingDiv.className = 'ai-msg assistant';
+    loadingDiv.querySelector('.ai-bubble').textContent = 'Fehler: ' + err.message;
+  }
+
+  aiLoading = false;
+  document.getElementById('ai-send-btn').disabled = false;
+  document.getElementById('ai-messages').scrollTop = 9999;
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Escape') closeModal();
+}
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+// ── CHAT PERSISTENZ ─────────────────────────────────────
+function saveChatHistory() {
+  try { localStorage.setItem('up_chat', JSON.stringify(aiHistory.slice(-30))); } catch {}
+}
+function loadChatHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('up_chat') || '[]');
+    if (!saved.length) return;
+    aiHistory = saved;
+    const msgs = document.getElementById('ai-messages');
+    saved.forEach(m => {
+      const displayText = m.role === 'assistant'
+        ? m.content.replace(/<UPDATES>[\s\S]*?<\/UPDATES>/g, '').trim()
+        : m.content;
+      const div = document.createElement('div');
+      div.className = `ai-msg ${m.role}`;
+      div.innerHTML = `<div class="ai-bubble">${escapeHtml(displayText).replace(/\n/g,'<br>')}</div>`;
+      msgs.appendChild(div);
+    });
+    msgs.scrollTop = msgs.scrollHeight;
+  } catch {}
+}
+function clearChat() {
+  aiHistory = [];
+  localStorage.removeItem('up_chat');
+  const msgs = document.getElementById('ai-messages');
+  msgs.innerHTML = `<div class="ai-msg assistant">
+    <div class="ai-bubble">Chat geleert. Wie kann ich helfen?</div>
+  </div>`;
+}
+
+// ── STATISTIK ───────────────────────────────────────────
+function updateStats() {
+  const counts = { geplant: 0, 'in-arbeit': 0, fertig: 0 };
+  const total = ALL_KLASSEN.length;
+  ALL_KLASSEN.forEach(kl => {
+    const [fach, klasse] = kl.split(' ');
+    const s = getS(fach, klasse);
+    counts[s.status]++;
+  });
+  const pct = total ? Math.round((counts.fertig / total) * 100) : 0;
+  document.getElementById('stats-bar').innerHTML = `
+    <span class="stat-item"><span class="stat-dot geplant"></span>Geplant <span class="stat-count">${counts.geplant}</span></span>
+    <span class="stat-item"><span class="stat-dot in-arbeit"></span>In Arbeit <span class="stat-count">${counts['in-arbeit']}</span></span>
+    <span class="stat-item"><span class="stat-dot fertig"></span>Fertig <span class="stat-count">${counts.fertig}</span></span>
+    <span class="stat-bar-wrap"><span class="stat-bar-fill" style="width:${pct}%"></span></span>
+    <span class="stat-item" style="color:var(--accent)"><span class="stat-count">${pct}%</span></span>
+  `;
+}
+
+// ── HEUTE & DRUCKEN ─────────────────────────────────────
+function goToday() {
+  weekOffset = 0;
+  currentWoche = wocheFromDate(getMonday(0));
+  updateWocheUI();
+  renderGrid();
+}
+function printPlan() {
+  const monday = getMonday(weekOffset);
+  const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
+  const fmt = d => d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const kw = getIsoWeek(monday);
+  document.getElementById('print-header').textContent =
+    `Unterrichtsplaner \u2013 KW ${kw} (${fmt(monday)} \u2013 ${fmt(friday)}) \u2013 ${currentWoche}-Woche`;
+  window.print();
+}
+
+// ── ICLOUD / CLOUDKIT ─────────────────────────────────────
+let ckContainer = null;
+let ckUserIdentity = null;
+let ckSyncDebounce = null;
+
+function setSyncStatus(syncState) {
+  const el = document.getElementById('sync-status');
+  el.className = 'sync-status ' + syncState;
+  el.style.display = '';
+  const labels = { syncing: '🔄', synced: '✓ iCloud', error: '⚠ Sync-Fehler' };
+  el.textContent = labels[syncState] || '';
+  if (syncState === 'error') el.onclick = () => syncToiCloud();
+  else el.onclick = null;
+}
+
+function resetCkConfig() {
+  localStorage.removeItem('up_ck_container');
+  localStorage.removeItem('up_ck_token');
+  ckContainer = null;
+  ckUserIdentity = null;
+  document.getElementById('ck-container-input').value = '';
+  document.getElementById('ck-token-input').value = '';
+  document.getElementById('ck-auth-row').style.display = 'none';
+  document.getElementById('ck-setup-row').style.display = 'flex';
+  document.getElementById('sync-status').style.display = 'none';
+}
+
+function saveCkConfig() {
+  const containerId = document.getElementById('ck-container-input').value.trim();
+  const apiToken = document.getElementById('ck-token-input').value.trim();
+  if (!containerId || !apiToken) return;
+  localStorage.setItem('up_ck_container', containerId);
+  localStorage.setItem('up_ck_token', apiToken);
+  document.getElementById('ck-setup-row').style.display = 'none';
+  document.getElementById('ck-auth-row').style.display = 'flex';
+  initCloudKit(containerId, apiToken);
+}
+
+function initCloudKit(containerId, apiToken) {
+  if (!containerId || !apiToken || typeof CloudKit === 'undefined') return;
+  try {
+    CloudKit.configure({
+      containers: [{
+        containerIdentifier: containerId,
+        apiTokenAuth: {
+          apiToken: apiToken,
+          persist: true,
+          signInButton: { id: 'ck-sign-in-btn', theme: 'black' },
+          signOutButton: { id: 'ck-sign-out-btn', theme: 'black' }
+        },
+        environment: 'production'
+      }]
+    });
+    ckContainer = CloudKit.getDefaultContainer();
+    ckContainer.setUpAuth().then(userIdentity => {
+      if (userIdentity) {
+        ckUserIdentity = userIdentity;
+        updateCkUI(true);
+        loadFromiCloud();
+      } else {
+        updateCkUI(false);
+        ckContainer.whenUserSignedIn().then(identity => {
+          ckUserIdentity = identity;
+          updateCkUI(true);
+          loadFromiCloud();
+        });
+      }
+    }).catch(e => console.error('CloudKit auth error', e));
+  } catch(e) { console.error('CloudKit init error', e); }
+}
+
+function updateCkUI(loggedIn) {
+  const userEl = document.getElementById('ck-user');
+  if (loggedIn && ckUserIdentity) {
+    const nc = ckUserIdentity.nameComponents;
+    const name = nc ? ((nc.givenName || '') + ' ' + (nc.familyName || '')).trim() : '';
+    userEl.textContent = name || 'Angemeldet';
+    document.getElementById('sync-status').style.display = '';
+    ckContainer.whenUserSignedOut && ckContainer.whenUserSignedOut().then(() => {
+      ckUserIdentity = null;
+      updateCkUI(false);
+    });
+  } else {
+    userEl.textContent = '';
+    document.getElementById('sync-status').style.display = 'none';
+  }
+}
+
+async function loadFromiCloud() {
+  if (!ckContainer || !ckUserIdentity) return;
+  try {
+    const response = await ckContainer.privateCloudDatabase.fetchRecords('main-state');
+    if (response.hasErrors) { setSyncStatus('synced'); return; }
+    const record = response.records && response.records[0];
+    if (record && record.fields && record.fields.data) {
+      const remoteState = JSON.parse(record.fields.data.value);
+      const remoteTs = remoteState._lastSync || 0;
+      const localTs = state._lastSync || 0;
+      if (remoteTs >= localTs) {
+        Object.assign(state, remoteState);
+        localStorage.setItem('up_v3', JSON.stringify(state));
+        renderGrid();
+      }
+    }
+    setSyncStatus('synced');
+  } catch(e) { console.error('iCloud laden fehlgeschlagen', e); setSyncStatus('error'); }
+}
+
+function syncToiCloud() {
+  clearTimeout(ckSyncDebounce);
+  ckSyncDebounce = setTimeout(async () => {
+    if (!ckContainer || !ckUserIdentity) return;
+    setSyncStatus('syncing');
+    try {
+      state._lastSync = Date.now();
+      save();
+      const record = {
+        recordType: 'PlannerState',
+        recordName: 'main-state',
+        fields: { data: { value: JSON.stringify(state) } }
+      };
+      const response = await ckContainer.privateCloudDatabase.saveRecords([record]);
+      if (response.hasErrors) throw new Error('CloudKit save error');
+      setSyncStatus('synced');
+    } catch(e) { console.error('iCloud sync fehlgeschlagen', e); setSyncStatus('error'); }
+  }, 2000);
+}
+
+// ── INIT ─────────────────────────────────────────────────
+if (!apiKey) {
+  document.getElementById('setup-screen').classList.add('open');
+} else {
+  document.getElementById('api-key-input').value = '••••••••••••';
+  document.getElementById('key-status').textContent = '✓ aktiv';
+}
+currentWoche = wocheFromDate(getMonday(0));
+updateWocheUI();
+renderGrid();
+updateStats();
+loadChatHistory();
+
+// iCloud CloudKit init
+const savedCkContainer = localStorage.getItem('up_ck_container');
+const savedCkToken = localStorage.getItem('up_ck_token');
+if (savedCkContainer && savedCkToken) {
+  document.getElementById('ck-container-input').value = savedCkContainer;
+  document.getElementById('ck-token-input').value = savedCkToken;
+  document.getElementById('ck-setup-row').style.display = 'none';
+  document.getElementById('ck-auth-row').style.display = 'flex';
+  initCloudKit(savedCkContainer, savedCkToken);
+}
+
+// Escape schließt Modal
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// Service Worker für Offline-Support
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
