@@ -9,28 +9,29 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: #1d1d1f;
     color: #f5f5f7;
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 2rem;
+    -webkit-font-smoothing: antialiased;
   }
 
   .container {
     text-align: center;
-    padding: 2rem;
-    max-width: 480px;
+    max-width: 620px;
     width: 100%;
   }
 
   .icon {
-    width: 96px;
-    height: 96px;
+    width: 88px;
+    height: 88px;
     background: linear-gradient(145deg, #6e56cf, #8b5cf6);
-    border-radius: 22px;
-    margin: 0 auto 2rem;
+    border-radius: 20px;
+    margin: 0 auto 1.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -38,8 +39,8 @@
   }
 
   .icon svg {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     fill: none;
     stroke: white;
     stroke-width: 1.5;
@@ -51,83 +52,134 @@
     font-size: 2rem;
     font-weight: 700;
     letter-spacing: -0.03em;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
     color: #f5f5f7;
   }
 
   .subtitle {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: #86868b;
     font-weight: 400;
     margin-bottom: 2.5rem;
     line-height: 1.5;
   }
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: #6e56cf;
-    color: white;
-    text-decoration: none;
-    font-size: 1rem;
+  .section-label {
+    font-size: 0.7rem;
     font-weight: 600;
-    padding: 0.9rem 2rem;
-    border-radius: 14px;
-    transition: all 0.2s ease;
-    box-shadow: 0 4px 16px rgba(110, 86, 207, 0.35);
-    letter-spacing: -0.01em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #48484a;
+    margin-bottom: 0.75rem;
+    text-align: left;
   }
 
-  .btn:hover {
-    background: #7c66d5;
-    transform: translateY(-1px);
-    box-shadow: 0 8px 24px rgba(110, 86, 207, 0.45);
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
   }
 
-  .btn:active {
-    transform: translateY(0);
+  @media (max-width: 480px) {
+    .cards { grid-template-columns: 1fr; }
   }
 
-  .btn svg {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: white;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .apps {
-    margin-top: 3rem;
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  .app-badge {
+  .card {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    background: rgba(255,255,255,0.06);
+    gap: 0.9rem;
+    background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    color: #86868b;
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+    text-align: left;
   }
 
-  .app-badge svg {
-    width: 13px;
-    height: 13px;
-    fill: none;
-    stroke: #86868b;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  .card:hover {
+    background: rgba(255,255,255,0.09);
+    border-color: rgba(255,255,255,0.14);
+    transform: translateY(-1px);
+  }
+
+  .card:active { transform: translateY(0); }
+
+  .card.primary {
+    background: rgba(110,86,207,0.15);
+    border-color: rgba(110,86,207,0.3);
+  }
+  .card.primary:hover {
+    background: rgba(110,86,207,0.22);
+    border-color: rgba(110,86,207,0.45);
+  }
+
+  .card.icloud {
+    background: rgba(0,113,227,0.12);
+    border-color: rgba(0,113,227,0.28);
+  }
+  .card.icloud:hover {
+    background: rgba(0,113,227,0.2);
+    border-color: rgba(0,113,227,0.42);
+  }
+
+  .card-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    font-size: 1.3rem;
+  }
+
+  .card.primary .card-icon { background: rgba(110,86,207,0.25); }
+  .card.icloud .card-icon  { background: rgba(0,113,227,0.22); }
+  .card:not(.primary):not(.icloud) .card-icon { background: rgba(255,255,255,0.07); }
+
+  .card-body { min-width: 0; }
+
+  .card-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #f5f5f7;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-sub {
+    font-size: 0.75rem;
+    color: #636366;
+    margin-top: 0.15rem;
+    line-height: 1.4;
+  }
+
+  .card.primary .card-title { color: #b5a0f5; }
+  .card.icloud  .card-title { color: #5aadff; }
+
+  .badge {
+    margin-left: auto;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgba(0,113,227,0.2);
+    color: #5aadff;
+    border: 1px solid rgba(0,113,227,0.35);
+    border-radius: 5px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 1.5rem 0;
   }
 </style>
 </head>
@@ -145,27 +197,43 @@
   <h1>Unterrichtsplaner</h1>
   <p class="subtitle">Stundenplan &amp; Unterrichtsplanung<br>Schulzentrum Oberes Elztal</p>
 
-  <a href="./Web-App/" class="btn">
-    <svg viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M12 8v8M8 12h8"/>
-    </svg>
-    App starten
-  </a>
+  <div class="section-label">Web-Apps</div>
+  <div class="cards">
+    <a href="./Web-App/" class="card primary">
+      <div class="card-icon">🌐</div>
+      <div class="card-body">
+        <div class="card-title">Web-App</div>
+        <div class="card-sub">OneDrive-Sync</div>
+      </div>
+    </a>
+    <a href="./iCloud-Web-App/" class="card icloud">
+      <div class="card-icon">☁️</div>
+      <div class="card-body">
+        <div class="card-title">iCloud-Web-App</div>
+        <div class="card-sub">iCloud-Sync via CloudKit</div>
+      </div>
+      <span class="badge">Neu</span>
+    </a>
+  </div>
 
-  <div class="apps">
-    <span class="app-badge">
-      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      Web-App
-    </span>
-    <span class="app-badge">
-      <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/></svg>
-      iOS-App
-    </span>
-    <span class="app-badge">
-      <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      Windows-App
-    </span>
+  <div class="divider"></div>
+
+  <div class="section-label">Native Apps</div>
+  <div class="cards">
+    <a href="./iOS-App/" class="card">
+      <div class="card-icon">📱</div>
+      <div class="card-body">
+        <div class="card-title">iOS-App</div>
+        <div class="card-sub">iPhone &amp; iPad</div>
+      </div>
+    </a>
+    <a href="./Windows-App/" class="card">
+      <div class="card-icon">🖥</div>
+      <div class="card-body">
+        <div class="card-title">Windows-App</div>
+        <div class="card-sub">Desktop</div>
+      </div>
+    </a>
   </div>
 
 </div>
