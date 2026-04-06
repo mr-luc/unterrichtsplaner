@@ -422,6 +422,25 @@ body {
   justify-content: center; transition: all 0.2s; flex-shrink: 0;
 }
 .print-btn:hover { background: rgba(255,255,255,0.14); color: white; }
+/* DRAG & DROP */
+.sp-cell.drag-over {
+  background: rgba(110,86,207,0.12) !important;
+  border-color: var(--accent) !important;
+  border-style: dashed !important;
+  box-shadow: 0 0 0 2px rgba(110,86,207,0.25);
+}
+.kl-chip.dragging { opacity: 0.35; transform: scale(0.97); }
+.kl-chip.moved::after {
+  content: '↕'; font-size: 8px; color: var(--accent);
+  margin-left: 3px; opacity: 0.7;
+}
+.reset-moves-btn {
+  padding: 3px 8px; border: 1px solid rgba(255,255,255,0.12); border-radius: 5px;
+  background: transparent; color: rgba(255,255,255,0.35); font-family: 'Inter', sans-serif;
+  font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+}
+.reset-moves-btn:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); }
+
 </style>
 </head>
 <body>
@@ -458,6 +477,7 @@ body {
   </div>
   <span class="sync-status" id="sync-status" title="iCloud-Sync" style="display:none"></span>
   <button class="print-btn" onclick="printPlan()" title="Drucken">🖨</button>
+  <button class="reset-moves-btn" id="reset-moves-btn" onclick="resetWeekMoves()" title="Verschiebungen dieser Woche zurücksetzen" style="display:none">↺ Reset</button>
   <button class="theme-toggle" id="theme-toggle" onclick="toggleDarkMode()" title="Dark Mode">🌙</button>
 </div>
 
@@ -736,16 +756,64 @@ function updateWocheUI() {
   document.getElementById('btn-b').className = 'woche-btn' + (currentWoche==='B'?' active-b':'');
 }
 
+// ── DRAG & DROP ──────────────────────────────────────────
+let dragData = null;
+
+function getWeekMoves() {
+  const kw = getIsoWeek(getMonday(weekOffset));
+  return (state._moves && state._moves[kw]) || [];
+}
+
+function applyMoves(baseEntries) {
+  const moves = getWeekMoves();
+  if (!moves.length) return baseEntries;
+  return baseEntries.map(e => {
+    const mv = moves.find(m => m.fach===e.fach && m.klasse===e.klasse && m.fromTag===e.tag && m.fromStd===e.std);
+    return mv ? { ...e, tag:mv.toTag, std:mv.toStd, _moved:true } : e;
+  });
+}
+
+function saveMove(fromTag, fromStd, toTag, toStd, fach, klasse) {
+  const kw = getIsoWeek(getMonday(weekOffset));
+  if (!state._moves) state._moves = {};
+  if (!state._moves[kw]) state._moves[kw] = [];
+  // Vorherige Move für diese Klasse+Slot entfernen
+  state._moves[kw] = state._moves[kw].filter(m =>
+    !(m.fach===fach && m.klasse===klasse && m.fromTag===fromTag && m.fromStd===fromStd)
+  );
+  // Wenn Ziel ≠ Ursprung: neuen Move speichern
+  if (fromTag!==toTag || fromStd!==toStd) {
+    state._moves[kw].push({ fach, klasse, fromTag, fromStd, toTag, toStd });
+  }
+  if (!state._moves[kw].length) delete state._moves[kw];
+  save(); renderGrid(); syncToiCloud();
+}
+
+function resetWeekMoves() {
+  const kw = getIsoWeek(getMonday(weekOffset));
+  if (state._moves) delete state._moves[kw];
+  save(); renderGrid(); syncToiCloud();
+}
+
 // ── RENDER GRID ──────────────────────────────────────────
 function renderGrid() {
   const grid = document.getElementById('sp-grid');
   grid.innerHTML = '';
   const monday = getMonday(weekOffset);
   const today = new Date(); today.setHours(0,0,0,0);
-  // Ferien pro Tag vorberechnen
   const dayDates = TAGE.map((_, i) => { const d = new Date(monday); d.setDate(monday.getDate()+i); return d; });
   const ferienTage = dayDates.map(d => getFerienName(d));
   const alleFerienName = ferienTage.every(f => f && f === ferienTage[0]) ? ferienTage[0] : null;
+
+  // Moves anwenden & Reset-Button anzeigen
+  const weekMoves = getWeekMoves();
+  const resetBtn = document.getElementById('reset-moves-btn');
+  if (resetBtn) resetBtn.style.display = weekMoves.length ? '' : 'none';
+
+  const effectiveEntries = applyMoves(
+    EINTRAEGE.filter(e => e.woche==='AB' || e.woche===currentWoche)
+  );
+
   grid.appendChild(document.createElement('div')); // corner
   TAGE.forEach((tag, i) => {
     const dayDate = dayDates[i];
@@ -756,7 +824,6 @@ function renderGrid() {
     h.innerHTML = `${tag}<div class="day-date">${dayDate.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })}</div>`;
     grid.appendChild(h);
   });
-  // Ferienband über ganzer Woche anzeigen
   if (alleFerienName) {
     const banner = document.createElement('div');
     banner.className = 'ferien-banner';
@@ -774,18 +841,51 @@ function renderGrid() {
       const ferien = ferienTage[i];
       cell.className = 'sp-cell' + (ferien ? ' ferien-cell' : '');
       if (ferien) { grid.appendChild(cell); return; }
-      const entries = EINTRAEGE.filter(e =>
-        e.std===std.std && e.tag===tag && (e.woche==='AB' || e.woche===currentWoche)
-      );
+
+      // Drag-Ziel
+      cell.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+      cell.addEventListener('dragenter', e => { e.preventDefault(); cell.classList.add('drag-over'); });
+      cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
+      cell.addEventListener('drop', e => {
+        e.preventDefault();
+        cell.classList.remove('drag-over');
+        if (!dragData) return;
+        saveMove(dragData.fromTag, dragData.fromStd, tag, std.std, dragData.fach, dragData.klasse);
+        dragData = null;
+      });
+
+      const entries = effectiveEntries.filter(e => e.std===std.std && e.tag===tag);
       const seen = new Set();
       entries.forEach(e => {
         const uid = e.fach+e.klasse;
         if (seen.has(uid)) return;
         seen.add(uid);
         const s = getS(e.fach, e.klasse);
+
+        // Ursprüngliche Position ermitteln (für saveMove)
+        const orig = EINTRAEGE.find(o => o.fach===e.fach && o.klasse===e.klasse && (o.woche==='AB'||o.woche===currentWoche));
+        const origTag = orig ? orig.tag : e.tag;
+        const origStd = orig ? orig.std : e.std;
+
         const chip = document.createElement('div');
-        chip.className = `kl-chip ${FACH_CLASS[e.fach]}`;
-        chip.onclick = () => openModal(e.fach, e.klasse);
+        chip.className = `kl-chip ${FACH_CLASS[e.fach]}${e._moved?' moved':''}`;
+        chip.draggable = true;
+        chip.title = e._moved ? 'Verschoben – ziehen zum Verschieben, doppelklick zum Zurücksetzen' : 'Ziehen zum Verschieben';
+
+        chip.addEventListener('dragstart', ev => {
+          dragData = { fach:e.fach, klasse:e.klasse, fromTag:tag, fromStd:std.std };
+          ev.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => chip.classList.add('dragging'), 0);
+        });
+        chip.addEventListener('dragend', () => { chip.classList.remove('dragging'); dragData = null; });
+        chip.addEventListener('dblclick', ev => {
+          ev.stopPropagation();
+          if (e._moved) saveMove(origTag, origStd, origTag, origStd, e.fach, e.klasse);
+        });
+        chip.addEventListener('click', ev => {
+          if (!e._moved || ev.detail===1) setTimeout(() => { if (ev.detail===1) openModal(e.fach, e.klasse); }, 200);
+        });
+
         chip.innerHTML = `
           <div class="kl-top">
             <span class="kl-name">${escapeHtml(e.klasse)}</span>
