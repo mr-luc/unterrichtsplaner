@@ -517,17 +517,18 @@ body {
       <button class="chat-clear" onclick="clearChat()" title="Chat leeren">Leeren</button>
     </div>
     <div class="stats-bar" id="stats-bar"></div>
-    <!-- iCloud Auto-Sync -->
-    <div class="od-header icloud-connect-row" id="icloud-disconnected" style="background:rgba(0,113,227,0.04)">
+    <!-- Cloud-Sync via JSONBin -->
+    <div class="od-header" id="sync-setup-row" style="background:rgba(0,113,227,0.04)">
       <span style="font-size:14px">☁️</span>
-      <span class="od-header-label" style="color:#0071e3">iCloud Drive</span>
-      <button class="icloud-btn" onclick="connectiCloudDrive()">Verbinden</button>
+      <span class="od-header-label" style="color:#0071e3">Cloud-Sync</span>
+      <input class="ai-key-input" id="sync-apikey-input" placeholder="JSONBin API-Key" style="max-width:130px;font-size:10px" />
+      <button class="icloud-btn" onclick="saveSyncKey()" style="padding:4px 8px;font-size:11px">✓</button>
     </div>
-    <div class="od-header icloud-connect-row" id="icloud-connected" style="display:none;background:rgba(0,113,227,0.04)">
+    <div class="od-header" id="sync-active-row" style="display:none;background:rgba(0,113,227,0.04)">
       <span style="font-size:14px">☁️</span>
-      <span class="icloud-file-name" id="icloud-file-name"></span>
-      <button class="icloud-btn" onclick="requestiCloudPermission()" id="icloud-perm-btn" style="display:none;background:#f59e0b">Erlauben</button>
-      <button class="icloud-btn" onclick="disconnectiBCloud()" style="background:rgba(0,0,0,0.12);color:var(--muted);font-size:10px">✕</button>
+      <span class="od-header-label" style="color:#0071e3">Cloud-Sync</span>
+      <span class="icloud-file-name" id="sync-bin-label"></span>
+      <button class="icloud-btn" onclick="disconnectSync()" style="background:rgba(0,0,0,0.12);color:var(--muted);font-size:10px">✕</button>
     </div>
     <!-- Anthropic API Key -->
     <div class="ai-key-row">
@@ -671,7 +672,7 @@ function escapeHtml(str) {
 // ── STATE ─────────────────────────────────────────────────
 let state = {};
 try { state = JSON.parse(localStorage.getItem('up_v3') || '{}'); } catch {}
-function save() { localStorage.setItem('up_v3', JSON.stringify(state)); writeToiCloud(); }
+function save() { localStorage.setItem('up_v3', JSON.stringify(state)); }
 function getKey(f, k) { return `${f}_${k}`; }
 function getS(f, k) {
   const key = getKey(f, k);
@@ -1151,129 +1152,111 @@ function printPlan() {
   window.print();
 }
 
-// ── ICLOUD AUTO-SYNC (File System Access API) ────────────
-let iCloudFileHandle = null;
+// ── CLOUD-SYNC via JSONBin.io ─────────────────────────────
+let syncApiKey = localStorage.getItem('up_sync_key') || '';
+let syncBinId  = localStorage.getItem('up_sync_bin')  || '';
+let syncDebounceTimer = null;
 
-// IndexedDB: File Handle persistent speichern
-function idbOpen() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open('up-fs', 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore('h');
-    req.onsuccess = e => res(e.target.result);
-    req.onerror = () => rej(req.error);
-  });
-}
-async function idbGet(key) {
-  const db = await idbOpen();
-  return new Promise(res => {
-    const tx = db.transaction('h', 'readonly');
-    const req = tx.objectStore('h').get(key);
-    req.onsuccess = () => res(req.result ?? null);
-    req.onerror = () => res(null);
-  });
-}
-async function idbSet(key, val) {
-  const db = await idbOpen();
-  return new Promise(res => {
-    const tx = db.transaction('h', 'readwrite');
-    tx.objectStore('h').put(val, key);
-    tx.oncomplete = res; tx.onerror = res;
-  });
-}
-async function idbDel(key) {
-  const db = await idbOpen();
-  return new Promise(res => {
-    const tx = db.transaction('h', 'readwrite');
-    tx.objectStore('h').delete(key);
-    tx.oncomplete = res; tx.onerror = res;
-  });
-}
-
-function setSyncStatus(state) {
+function setSyncStatus(st) {
   const el = document.getElementById('sync-status');
-  if (!iCloudFileHandle) { el.style.display = 'none'; return; }
+  if (!syncApiKey) { el.style.display = 'none'; return; }
   el.style.display = '';
-  const map = { saving:'🔄', saved:'✓ iCloud', error:'⚠ Sync-Fehler' };
-  el.textContent = map[state] || '';
-  el.className = 'sync-status ' + state;
-  if (state === 'saved') setTimeout(() => { if (el.textContent === '✓ iCloud') el.style.display = 'none'; }, 3000);
+  const map = { saving:'🔄', saved:'✓ Sync', error:'⚠ Sync-Fehler' };
+  el.textContent = map[st] || '';
+  el.className = 'sync-status ' + st;
+  if (st === 'error') el.onclick = () => syncToiCloud();
+  if (st === 'saved') setTimeout(() => { if (el.className.includes('saved')) el.style.display = 'none'; }, 3000);
 }
 
-async function writeToiCloud() {
-  if (!iCloudFileHandle) return;
-  try {
-    const perm = await iCloudFileHandle.queryPermission({ mode: 'readwrite' });
-    if (perm !== 'granted') {
-      updateiCloudUI('pending');
-      return;
-    }
-    setSyncStatus('saving');
-    const writable = await iCloudFileHandle.createWritable();
-    await writable.write(JSON.stringify(state, null, 2));
-    await writable.close();
-    setSyncStatus('saved');
-  } catch(e) {
-    console.error('iCloud write error', e);
-    setSyncStatus('error');
-  }
+function updateSyncUI() {
+  const hasKey = !!syncApiKey;
+  document.getElementById('sync-setup-row').style.display = hasKey ? 'none' : '';
+  document.getElementById('sync-active-row').style.display = hasKey ? '' : 'none';
+  if (hasKey) document.getElementById('sync-bin-label').textContent = syncBinId ? 'Verbunden' : 'Einrichten…';
 }
 
-function updateiCloudUI(status) {
-  document.getElementById('icloud-disconnected').style.display = status === 'disconnected' ? '' : 'none';
-  document.getElementById('icloud-connected').style.display = status !== 'disconnected' ? '' : 'none';
-  const permBtn = document.getElementById('icloud-perm-btn');
-  permBtn.style.display = status === 'pending' ? '' : 'none';
-  if (iCloudFileHandle) {
-    document.getElementById('icloud-file-name').textContent = iCloudFileHandle.name || 'unterrichtsplaner.json';
-  }
+function saveSyncKey() {
+  const key = document.getElementById('sync-apikey-input').value.trim();
+  if (!key) return;
+  syncApiKey = key;
+  localStorage.setItem('up_sync_key', key);
+  updateSyncUI();
+  initSync();
 }
 
-async function connectiCloudDrive() {
-  if (!('showSaveFilePicker' in window)) {
-    alert('Automatisches Speichern wird nur in Safari (iOS 15.2+ / macOS 12.2+) unterstützt.');
-    return;
-  }
-  try {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: 'unterrichtsplaner.json',
-      types: [{ description: 'JSON-Datei', accept: { 'application/json': ['.json'] } }]
-    });
-    iCloudFileHandle = handle;
-    await idbSet('icloud', handle);
-    updateiCloudUI('connected');
-    await writeToiCloud();
-  } catch(e) {
-    if (e.name !== 'AbortError') console.error('iCloud connect error', e);
-  }
-}
-
-async function requestiCloudPermission() {
-  if (!iCloudFileHandle) return;
-  try {
-    const result = await iCloudFileHandle.requestPermission({ mode: 'readwrite' });
-    if (result === 'granted') { updateiCloudUI('connected'); await writeToiCloud(); }
-  } catch(e) { console.error('Permission error', e); }
-}
-
-async function disconnectiBCloud() {
-  iCloudFileHandle = null;
-  await idbDel('icloud');
-  updateiCloudUI('disconnected');
+function disconnectSync() {
+  syncApiKey = ''; syncBinId = '';
+  localStorage.removeItem('up_sync_key');
+  localStorage.removeItem('up_sync_bin');
+  document.getElementById('sync-apikey-input').value = '';
+  updateSyncUI();
   document.getElementById('sync-status').style.display = 'none';
 }
 
-async function initiCloudDrive() {
-  if (!('showSaveFilePicker' in window)) return;
-  const handle = await idbGet('icloud');
-  if (!handle) return;
-  iCloudFileHandle = handle;
-  try {
-    const perm = await handle.queryPermission({ mode: 'readwrite' });
-    updateiCloudUI(perm === 'granted' ? 'connected' : 'pending');
-  } catch { iCloudFileHandle = null; }
+async function initSync() {
+  if (!syncApiKey) return;
+  if (syncBinId) {
+    // Vorhandene Daten laden und ggf. übernehmen
+    try {
+      setSyncStatus('saving');
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${syncBinId}/latest`, {
+        headers: { 'X-Master-Key': syncApiKey }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const remote = data.record || {};
+        const remoteTs = remote._lastSync || 0;
+        const localTs  = state._lastSync  || 0;
+        if (remoteTs > localTs) {
+          Object.assign(state, remote);
+          localStorage.setItem('up_v3', JSON.stringify(state));
+          renderGrid(); updateStats();
+        }
+        setSyncStatus('saved');
+        updateSyncUI();
+      } else { throw new Error('HTTP ' + res.status); }
+    } catch(e) { console.error('Sync load error', e); setSyncStatus('error'); }
+  } else {
+    // Neuen Bin anlegen
+    try {
+      const res = await fetch('https://api.jsonbin.io/v3/b', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': syncApiKey,
+          'X-Bin-Name': 'unterrichtsplaner',
+          'X-Bin-Private': 'true'
+        },
+        body: JSON.stringify(state)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      syncBinId = data.metadata.id;
+      localStorage.setItem('up_sync_bin', syncBinId);
+      setSyncStatus('saved');
+      updateSyncUI();
+    } catch(e) { console.error('Bin create error', e); setSyncStatus('error'); }
+  }
 }
 
-function syncToiCloud() { writeToiCloud(); }
+function syncToiCloud() {
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(async () => {
+    if (!syncApiKey || !syncBinId) return;
+    setSyncStatus('saving');
+    try {
+      state._lastSync = Date.now();
+      localStorage.setItem('up_v3', JSON.stringify(state));
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${syncBinId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey },
+        body: JSON.stringify(state)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      setSyncStatus('saved');
+    } catch(e) { console.error('Sync error', e); setSyncStatus('error'); }
+  }, 1500);
+}
 
 // ── INIT ─────────────────────────────────────────────────
 if (!apiKey) {
@@ -1288,7 +1271,8 @@ renderGrid();
 updateStats();
 loadChatHistory();
 
-initiCloudDrive();
+updateSyncUI();
+if (syncApiKey) initSync();
 
 // Escape schließt Modal
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
