@@ -335,6 +335,18 @@ body {
   background: #0071e3; color: white; flex-shrink: 0; transition: opacity 0.15s;
 }
 .icloud-btn:hover { opacity: 0.85; }
+/* ICLOUD AUTO-SYNC */
+.sync-status {
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4);
+  cursor: default; flex-shrink: 0; transition: all 0.2s;
+}
+.sync-status.saving  { color: #fbbf24; }
+.sync-status.saved   { color: #4ade80; }
+.sync-status.error   { color: #f87171; cursor: pointer; }
+.icloud-connect-row { gap: 6px; }
+.icloud-file-name { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+
 
 
 /* DARK MODE */
@@ -481,6 +493,7 @@ body {
     <button class="woche-btn active-a" id="btn-a" onclick="setWocheManual('A')">A</button>
     <button class="woche-btn" id="btn-b" onclick="setWocheManual('B')">B</button>
   </div>
+  <span class="sync-status" id="sync-status" style="display:none"></span>
   <button class="print-btn" onclick="printPlan()" title="Drucken">🖨</button>
   <button class="reset-moves-btn" id="reset-moves-btn" onclick="resetWeekMoves()" title="Verschiebungen dieser Woche zurücksetzen" style="display:none">↺ Reset</button>
   <button class="theme-toggle" id="theme-toggle" onclick="toggleDarkMode()" title="Dark Mode">🌙</button>
@@ -504,17 +517,18 @@ body {
       <button class="chat-clear" onclick="clearChat()" title="Chat leeren">Leeren</button>
     </div>
     <div class="stats-bar" id="stats-bar"></div>
-    <!-- iCloud Export/Import -->
-    <div class="od-header" style="background:rgba(0,113,227,0.04)">
+    <!-- iCloud Auto-Sync -->
+    <div class="od-header icloud-connect-row" id="icloud-disconnected" style="background:rgba(0,113,227,0.04)">
       <span style="font-size:14px">☁️</span>
       <span class="od-header-label" style="color:#0071e3">iCloud Drive</span>
-      <button class="icloud-btn" onclick="exportToiCloud()" title="Als JSON in iCloud Drive speichern">💾 Export</button>
-      <label class="icloud-btn" title="JSON aus iCloud Drive laden" style="cursor:pointer">
-        📂 Import
-        <input type="file" id="icloud-import-input" accept=".json" style="display:none" onchange="handleImport(event)" />
-      </label>
+      <button class="icloud-btn" onclick="connectiCloudDrive()">Verbinden</button>
     </div>
-    <div id="icloud-status" style="display:none;padding:5px 16px;font-size:11px;font-weight:600;color:#22c55e;background:rgba(34,197,94,0.06);border-bottom:1px solid var(--border)">✓ Importiert</div>
+    <div class="od-header icloud-connect-row" id="icloud-connected" style="display:none;background:rgba(0,113,227,0.04)">
+      <span style="font-size:14px">☁️</span>
+      <span class="icloud-file-name" id="icloud-file-name"></span>
+      <button class="icloud-btn" onclick="requestiCloudPermission()" id="icloud-perm-btn" style="display:none;background:#f59e0b">Erlauben</button>
+      <button class="icloud-btn" onclick="disconnectiBCloud()" style="background:rgba(0,0,0,0.12);color:var(--muted);font-size:10px">✕</button>
+    </div>
     <!-- Anthropic API Key -->
     <div class="ai-key-row">
       <input class="ai-key-input" type="password" id="api-key-input" placeholder="sk-ant-..." />
@@ -657,7 +671,7 @@ function escapeHtml(str) {
 // ── STATE ─────────────────────────────────────────────────
 let state = {};
 try { state = JSON.parse(localStorage.getItem('up_v3') || '{}'); } catch {}
-function save() { localStorage.setItem('up_v3', JSON.stringify(state)); }
+function save() { localStorage.setItem('up_v3', JSON.stringify(state)); writeToiCloud(); }
 function getKey(f, k) { return `${f}_${k}`; }
 function getS(f, k) {
   const key = getKey(f, k);
@@ -1137,44 +1151,129 @@ function printPlan() {
   window.print();
 }
 
-// ── ICLOUD EXPORT / IMPORT ───────────────────────────────
-function exportToiCloud() {
-  const data = JSON.stringify(state, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'unterrichtsplaner.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+// ── ICLOUD AUTO-SYNC (File System Access API) ────────────
+let iCloudFileHandle = null;
+
+// IndexedDB: File Handle persistent speichern
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('up-fs', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('h');
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise(res => {
+    const tx = db.transaction('h', 'readonly');
+    const req = tx.objectStore('h').get(key);
+    req.onsuccess = () => res(req.result ?? null);
+    req.onerror = () => res(null);
+  });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise(res => {
+    const tx = db.transaction('h', 'readwrite');
+    tx.objectStore('h').put(val, key);
+    tx.oncomplete = res; tx.onerror = res;
+  });
+}
+async function idbDel(key) {
+  const db = await idbOpen();
+  return new Promise(res => {
+    const tx = db.transaction('h', 'readwrite');
+    tx.objectStore('h').delete(key);
+    tx.oncomplete = res; tx.onerror = res;
+  });
 }
 
-function handleImport(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (typeof imported !== 'object') throw new Error();
-      Object.assign(state, imported);
-      save();
-      renderGrid();
-      updateStats();
-      const status = document.getElementById('icloud-status');
-      status.style.display = '';
-      setTimeout(() => { status.style.display = 'none'; }, 3000);
-    } catch {
-      alert('Ungültige Datei – bitte eine exportierte unterrichtsplaner.json wählen.');
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  if (!iCloudFileHandle) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const map = { saving:'🔄', saved:'✓ iCloud', error:'⚠ Sync-Fehler' };
+  el.textContent = map[state] || '';
+  el.className = 'sync-status ' + state;
+  if (state === 'saved') setTimeout(() => { if (el.textContent === '✓ iCloud') el.style.display = 'none'; }, 3000);
+}
+
+async function writeToiCloud() {
+  if (!iCloudFileHandle) return;
+  try {
+    const perm = await iCloudFileHandle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      updateiCloudUI('pending');
+      return;
     }
-  };
-  reader.readAsText(file);
-  event.target.value = '';
+    setSyncStatus('saving');
+    const writable = await iCloudFileHandle.createWritable();
+    await writable.write(JSON.stringify(state, null, 2));
+    await writable.close();
+    setSyncStatus('saved');
+  } catch(e) {
+    console.error('iCloud write error', e);
+    setSyncStatus('error');
+  }
 }
 
-function syncToiCloud() { /* Export/Import ist manuell – kein Auto-Sync */ }
+function updateiCloudUI(status) {
+  document.getElementById('icloud-disconnected').style.display = status === 'disconnected' ? '' : 'none';
+  document.getElementById('icloud-connected').style.display = status !== 'disconnected' ? '' : 'none';
+  const permBtn = document.getElementById('icloud-perm-btn');
+  permBtn.style.display = status === 'pending' ? '' : 'none';
+  if (iCloudFileHandle) {
+    document.getElementById('icloud-file-name').textContent = iCloudFileHandle.name || 'unterrichtsplaner.json';
+  }
+}
+
+async function connectiCloudDrive() {
+  if (!('showSaveFilePicker' in window)) {
+    alert('Automatisches Speichern wird nur in Safari (iOS 15.2+ / macOS 12.2+) unterstützt.');
+    return;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'unterrichtsplaner.json',
+      types: [{ description: 'JSON-Datei', accept: { 'application/json': ['.json'] } }]
+    });
+    iCloudFileHandle = handle;
+    await idbSet('icloud', handle);
+    updateiCloudUI('connected');
+    await writeToiCloud();
+  } catch(e) {
+    if (e.name !== 'AbortError') console.error('iCloud connect error', e);
+  }
+}
+
+async function requestiCloudPermission() {
+  if (!iCloudFileHandle) return;
+  try {
+    const result = await iCloudFileHandle.requestPermission({ mode: 'readwrite' });
+    if (result === 'granted') { updateiCloudUI('connected'); await writeToiCloud(); }
+  } catch(e) { console.error('Permission error', e); }
+}
+
+async function disconnectiBCloud() {
+  iCloudFileHandle = null;
+  await idbDel('icloud');
+  updateiCloudUI('disconnected');
+  document.getElementById('sync-status').style.display = 'none';
+}
+
+async function initiCloudDrive() {
+  if (!('showSaveFilePicker' in window)) return;
+  const handle = await idbGet('icloud');
+  if (!handle) return;
+  iCloudFileHandle = handle;
+  try {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    updateiCloudUI(perm === 'granted' ? 'connected' : 'pending');
+  } catch { iCloudFileHandle = null; }
+}
+
+function syncToiCloud() { writeToiCloud(); }
 
 // ── INIT ─────────────────────────────────────────────────
 if (!apiKey) {
@@ -1189,7 +1288,7 @@ renderGrid();
 updateStats();
 loadChatHistory();
 
-// iCloud: Export/Import – kein Init nötig
+initiCloudDrive();
 
 // Escape schließt Modal
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
