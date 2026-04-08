@@ -1,4 +1,4 @@
-const CACHE = 'unterrichtsplaner-icloud-v1';
+const CACHE = 'unterrichtsplaner-icloud-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,14 +25,9 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // API calls + CloudKit Auth: immer Netzwerk, nie cachen
+  // API calls: immer Netzwerk, nie cachen
   if (e.request.url.includes('anthropic.com') ||
-      e.request.url.includes('fonts.g') ||
-      e.request.url.includes('apple-cloudkit.com') ||
-      e.request.url.includes('icloud.com') ||
-      e.request.url.includes('appleid.apple.com') ||
-      e.request.url.includes('?code=') ||
-      e.request.url.includes('?error=')) {
+      e.request.url.includes('fonts.g')) {
     e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })));
     return;
   }

@@ -11,7 +11,6 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Unterrichtsplaner</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.apple-cloudkit.com/ck/2/cloudkit.js"></script>
 <style>
 :root {
   --bio: #34a853; --bio-bg: rgba(52,168,83,0.08); --bio-border: rgba(52,168,83,0.2);
@@ -330,6 +329,13 @@ body {
 }
 .od-btn:hover { opacity: 0.88; }
 .od-btn.logout { background: rgba(0,0,0,0.06); color: var(--muted); }
+.icloud-btn {
+  padding: 4px 10px; border: none; border-radius: 6px; font-size: 11px;
+  font-family: 'Inter', sans-serif; font-weight: 600; cursor: pointer;
+  background: #0071e3; color: white; flex-shrink: 0; transition: opacity 0.15s;
+}
+.icloud-btn:hover { opacity: 0.85; }
+
 
 /* DARK MODE */
 .dark {
@@ -475,7 +481,6 @@ body {
     <button class="woche-btn active-a" id="btn-a" onclick="setWocheManual('A')">A</button>
     <button class="woche-btn" id="btn-b" onclick="setWocheManual('B')">B</button>
   </div>
-  <span class="sync-status" id="sync-status" title="iCloud-Sync" style="display:none"></span>
   <button class="print-btn" onclick="printPlan()" title="Drucken">🖨</button>
   <button class="reset-moves-btn" id="reset-moves-btn" onclick="resetWeekMoves()" title="Verschiebungen dieser Woche zurücksetzen" style="display:none">↺ Reset</button>
   <button class="theme-toggle" id="theme-toggle" onclick="toggleDarkMode()" title="Dark Mode">🌙</button>
@@ -499,22 +504,17 @@ body {
       <button class="chat-clear" onclick="clearChat()" title="Chat leeren">Leeren</button>
     </div>
     <div class="stats-bar" id="stats-bar"></div>
-    <!-- iCloud CloudKit -->
-    <div class="od-header" id="ck-setup-row" style="background:rgba(0,113,227,0.04)">
+    <!-- iCloud Export/Import -->
+    <div class="od-header" style="background:rgba(0,113,227,0.04)">
       <span style="font-size:14px">☁️</span>
-      <span class="od-header-label" style="color:#0071e3">iCloud</span>
-      <input class="ai-key-input" id="ck-container-input" placeholder="Container-ID" style="max-width:95px;font-size:10px" />
-      <input class="ai-key-input" id="ck-token-input" placeholder="API-Token" style="max-width:95px;font-size:10px" />
-      <button class="ai-key-save" onclick="saveCkConfig()" style="padding:4px 8px;font-size:11px;background:#0071e3">✓</button>
+      <span class="od-header-label" style="color:#0071e3">iCloud Drive</span>
+      <button class="icloud-btn" onclick="exportToiCloud()" title="Als JSON in iCloud Drive speichern">💾 Export</button>
+      <label class="icloud-btn" title="JSON aus iCloud Drive laden" style="cursor:pointer">
+        📂 Import
+        <input type="file" id="icloud-import-input" accept=".json" style="display:none" onchange="handleImport(event)" />
+      </label>
     </div>
-    <div class="od-header" id="ck-auth-row" style="display:none;background:rgba(0,113,227,0.04)">
-      <span style="font-size:14px">☁️</span>
-      <span class="od-header-label" style="color:#0071e3">iCloud</span>
-      <span class="od-user-text" id="ck-user"></span>
-      <span id="ck-sign-in-btn" style="flex-shrink:0"></span>
-      <span id="ck-sign-out-btn" style="flex-shrink:0"></span>
-      <button onclick="resetCkConfig()" style="background:none;border:none;cursor:pointer;font-size:12px;color:#6b6b8a;padding:0 2px" title="Config ändern">✏️</button>
-    </div>
+    <div id="icloud-status" style="display:none;padding:5px 16px;font-size:11px;font-weight:600;color:#22c55e;background:rgba(34,197,94,0.06);border-bottom:1px solid var(--border)">✓ Importiert</div>
     <!-- Anthropic API Key -->
     <div class="ai-key-row">
       <input class="ai-key-input" type="password" id="api-key-input" placeholder="sk-ant-..." />
@@ -1137,133 +1137,44 @@ function printPlan() {
   window.print();
 }
 
-// ── ICLOUD / CLOUDKIT ─────────────────────────────────────
-let ckContainer = null;
-let ckUserIdentity = null;
-let ckSyncDebounce = null;
-
-function setSyncStatus(syncState) {
-  const el = document.getElementById('sync-status');
-  el.className = 'sync-status ' + syncState;
-  el.style.display = '';
-  const labels = { syncing: '🔄', synced: '✓ iCloud', error: '⚠ Sync-Fehler' };
-  el.textContent = labels[syncState] || '';
-  if (syncState === 'error') el.onclick = () => syncToiCloud();
-  else el.onclick = null;
+// ── ICLOUD EXPORT / IMPORT ───────────────────────────────
+function exportToiCloud() {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'unterrichtsplaner.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
-function resetCkConfig() {
-  localStorage.removeItem('up_ck_container');
-  localStorage.removeItem('up_ck_token');
-  ckContainer = null;
-  ckUserIdentity = null;
-  document.getElementById('ck-container-input').value = '';
-  document.getElementById('ck-token-input').value = '';
-  document.getElementById('ck-auth-row').style.display = 'none';
-  document.getElementById('ck-setup-row').style.display = 'flex';
-  document.getElementById('sync-status').style.display = 'none';
-}
-
-function saveCkConfig() {
-  const containerId = document.getElementById('ck-container-input').value.trim();
-  const apiToken = document.getElementById('ck-token-input').value.trim();
-  if (!containerId || !apiToken) return;
-  localStorage.setItem('up_ck_container', containerId);
-  localStorage.setItem('up_ck_token', apiToken);
-  document.getElementById('ck-setup-row').style.display = 'none';
-  document.getElementById('ck-auth-row').style.display = 'flex';
-  initCloudKit(containerId, apiToken);
-}
-
-function initCloudKit(containerId, apiToken) {
-  if (!containerId || !apiToken || typeof CloudKit === 'undefined') return;
-  try {
-    CloudKit.configure({
-      containers: [{
-        containerIdentifier: containerId,
-        apiTokenAuth: {
-          apiToken: apiToken,
-          persist: true,
-          signInButton: { id: 'ck-sign-in-btn', theme: 'black' },
-          signOutButton: { id: 'ck-sign-out-btn', theme: 'black' }
-        },
-        environment: 'production'
-      }]
-    });
-    ckContainer = CloudKit.getDefaultContainer();
-    ckContainer.setUpAuth().then(userIdentity => {
-      if (userIdentity) {
-        ckUserIdentity = userIdentity;
-        updateCkUI(true);
-        loadFromiCloud();
-      } else {
-        updateCkUI(false);
-        ckContainer.whenUserSignedIn().then(identity => {
-          ckUserIdentity = identity;
-          updateCkUI(true);
-          loadFromiCloud();
-        });
-      }
-    }).catch(e => console.error('CloudKit auth error', e));
-  } catch(e) { console.error('CloudKit init error', e); }
-}
-
-function updateCkUI(loggedIn) {
-  const userEl = document.getElementById('ck-user');
-  if (loggedIn && ckUserIdentity) {
-    const nc = ckUserIdentity.nameComponents;
-    const name = nc ? ((nc.givenName || '') + ' ' + (nc.familyName || '')).trim() : '';
-    userEl.textContent = name || 'Angemeldet';
-    document.getElementById('sync-status').style.display = '';
-    ckContainer.whenUserSignedOut && ckContainer.whenUserSignedOut().then(() => {
-      ckUserIdentity = null;
-      updateCkUI(false);
-    });
-  } else {
-    userEl.textContent = '';
-    document.getElementById('sync-status').style.display = 'none';
-  }
-}
-
-async function loadFromiCloud() {
-  if (!ckContainer || !ckUserIdentity) return;
-  try {
-    const response = await ckContainer.privateCloudDatabase.fetchRecords('main-state');
-    if (response.hasErrors) { setSyncStatus('synced'); return; }
-    const record = response.records && response.records[0];
-    if (record && record.fields && record.fields.data) {
-      const remoteState = JSON.parse(record.fields.data.value);
-      const remoteTs = remoteState._lastSync || 0;
-      const localTs = state._lastSync || 0;
-      if (remoteTs >= localTs) {
-        Object.assign(state, remoteState);
-        localStorage.setItem('up_v3', JSON.stringify(state));
-        renderGrid();
-      }
-    }
-    setSyncStatus('synced');
-  } catch(e) { console.error('iCloud laden fehlgeschlagen', e); setSyncStatus('error'); }
-}
-
-function syncToiCloud() {
-  clearTimeout(ckSyncDebounce);
-  ckSyncDebounce = setTimeout(async () => {
-    if (!ckContainer || !ckUserIdentity) return;
-    setSyncStatus('syncing');
+function handleImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
     try {
-      state._lastSync = Date.now();
+      const imported = JSON.parse(e.target.result);
+      if (typeof imported !== 'object') throw new Error();
+      Object.assign(state, imported);
       save();
-      const record = {
-        recordType: 'PlannerState',
-        recordName: 'main-state',
-        fields: { data: { value: JSON.stringify(state) } }
-      };
-      const response = await ckContainer.privateCloudDatabase.saveRecords([record]);
-      if (response.hasErrors) throw new Error('CloudKit save error');
-      setSyncStatus('synced');
-    } catch(e) { console.error('iCloud sync fehlgeschlagen', e); setSyncStatus('error'); }
-  }, 2000);
+      renderGrid();
+      updateStats();
+      const status = document.getElementById('icloud-status');
+      status.style.display = '';
+      setTimeout(() => { status.style.display = 'none'; }, 3000);
+    } catch {
+      alert('Ungültige Datei – bitte eine exportierte unterrichtsplaner.json wählen.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
+
+function syncToiCloud() { /* Export/Import ist manuell – kein Auto-Sync */ }
 
 // ── INIT ─────────────────────────────────────────────────
 if (!apiKey) {
@@ -1278,16 +1189,7 @@ renderGrid();
 updateStats();
 loadChatHistory();
 
-// iCloud CloudKit init
-const savedCkContainer = localStorage.getItem('up_ck_container');
-const savedCkToken = localStorage.getItem('up_ck_token');
-if (savedCkContainer && savedCkToken) {
-  document.getElementById('ck-container-input').value = savedCkContainer;
-  document.getElementById('ck-token-input').value = savedCkToken;
-  document.getElementById('ck-setup-row').style.display = 'none';
-  document.getElementById('ck-auth-row').style.display = 'flex';
-  initCloudKit(savedCkContainer, savedCkToken);
-}
+// iCloud: Export/Import – kein Init nötig
 
 // Escape schließt Modal
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
