@@ -1,0 +1,145 @@
+name: Release – Alle Artefakte erstellen
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versionsnummer (z. B. v1.0.0)'
+        required: false
+        default: 'v0.0.0-dev'
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Web-App als ZIP paketieren
+  # ─────────────────────────────────────────────
+  web-app:
+    name: Web-App paketieren
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Web-App als ZIP paketieren
+        run: |
+          cd Web-App
+          zip -r ../Unterrichtsplaner-WebApp.zip \
+            index.html \
+            manifest.json \
+            sw.js \
+            icon-192.png \
+            icon-512.png
+
+      - name: Web-App Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unterrichtsplaner-WebApp
+          path: Unterrichtsplaner-WebApp.zip
+
+  # ─────────────────────────────────────────────
+  # Job 2: Windows-App kompilieren
+  # ─────────────────────────────────────────────
+  windows-app:
+    name: Windows-App kompilieren
+    runs-on: windows-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: .NET 8 SDK einrichten
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build & Publish (Self-contained EXE)
+        run: |
+          dotnet publish Windows-App/Unterrichtsplaner/Unterrichtsplaner.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o publish/
+
+      - name: Windows-App Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unterrichtsplaner-Windows
+          path: publish/Unterrichtsplaner.exe
+
+  # ─────────────────────────────────────────────
+  # Job 3: iOS-Quellcode paketieren
+  # ─────────────────────────────────────────────
+  ios-source:
+    name: iOS-Quellcode paketieren
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: iOS-Quellcode als ZIP paketieren
+        run: |
+          zip -r Unterrichtsplaner-iOS-Source.zip iOS-App/
+
+      - name: iOS-Quellcode Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unterrichtsplaner-iOS-Source
+          path: Unterrichtsplaner-iOS-Source.zip
+
+  # ─────────────────────────────────────────────
+  # Job 4: GitHub Release mit allen Artefakten
+  # ─────────────────────────────────────────────
+  release:
+    name: GitHub Release erstellen
+    needs: [web-app, windows-app, ios-source]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Artefakte herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Dateien für Release vorbereiten
+        run: |
+          mv artifacts/Unterrichtsplaner-WebApp/Unterrichtsplaner-WebApp.zip ./
+          mv artifacts/Unterrichtsplaner-Windows/Unterrichtsplaner.exe ./
+          mv artifacts/Unterrichtsplaner-iOS-Source/Unterrichtsplaner-iOS-Source.zip ./
+
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Unterrichtsplaner ${{ github.ref_name }}"
+          files: |
+            Unterrichtsplaner-WebApp.zip
+            Unterrichtsplaner.exe
+            Unterrichtsplaner-iOS-Source.zip
+          body: |
+            ## Unterrichtsplaner ${{ github.ref_name }}
+
+            ### Enthaltene Artefakte
+
+            | Datei | Plattform | Beschreibung |
+            |-------|-----------|--------------|
+            | `Unterrichtsplaner-WebApp.zip` | Web / PWA | Entpacken und `index.html` im Browser öffnen |
+            | `Unterrichtsplaner.exe` | Windows | Doppelklick – keine Installation nötig |
+            | `Unterrichtsplaner-iOS-Source.zip` | iOS (Xcode) | Quellcode für Xcode-Build |
+
+            ### Web-App Installation
+            1. `Unterrichtsplaner-WebApp.zip` herunterladen und entpacken
+            2. `index.html` in einem modernen Browser öffnen
+            3. Für volle PWA-Funktionalität auf einem Webserver hosten
+
+            ### Windows Installation
+            1. `Unterrichtsplaner.exe` herunterladen
+            2. Doppelklick – fertig, keine Installation nötig
+            3. Erfordert Windows 10/11 (x64)
+
+            ### iOS
+            Xcode-Quellcode herunterladen und mit Xcode 15+ für iOS 17+ kompilieren.

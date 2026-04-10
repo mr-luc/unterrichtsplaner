@@ -1,0 +1,33 @@
+name: Web-App Artefakt erstellen
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'Web-App/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Web-App als ZIP paketieren
+        run: |
+          cd Web-App
+          zip -r ../Unterrichtsplaner-WebApp.zip \
+            index.html \
+            manifest.json \
+            sw.js \
+            icon-192.png \
+            icon-512.png
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unterrichtsplaner-WebApp
+          path: Unterrichtsplaner-WebApp.zip
+          retention-days: 30
